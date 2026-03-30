@@ -629,6 +629,16 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);
    STATE & PERSISTENCE
 ═══════════════════════════════════════════════════════════ */
 const LS_KEY = 'myspace_v5';
+
+// ── TRACKING START DATE ──────────────────────────────────
+// Days before this date are treated as "future" (untracked)
+// on the calendar. Change this date when you want to shift
+// the tracking origin. Set to midnight so date comparisons
+// work correctly.
+const TRACKING_START = new Date(2026, 2, 30); // March 30, 2026
+TRACKING_START.setHours(0, 0, 0, 0);
+// ─────────────────────────────────────────────────────────
+
 let D = {
   habits: [],
   dailyLog: {},
@@ -919,23 +929,40 @@ const CAL_DOWS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 function renderCalendar() {
   const yr = D.calY, mo = D.calM;
   document.getElementById('cal-lbl').textContent = `${CAL_MONTHS[mo]} ${yr}`;
-  const today = new Date(); today.setHours(0,0,0,0);
-  const first = new Date(yr, mo, 1).getDay();
-  const days = new Date(yr, mo + 1, 0).getDate();
+
+  // "today" for the today highlight ring (real current date)
+  const realToday = new Date(); realToday.setHours(0,0,0,0);
+
+  // For March 2026 only: hide days 1–29, start grid from day 30.
+  // Every other month renders fully as normal.
+  const isMarch2026 = (yr === 2026 && mo === 2);
+  const startDay = isMarch2026 ? 30 : 1;
+  const totalDays = new Date(yr, mo + 1, 0).getDate();
+
   let html = CAL_DOWS.map(d => `<div class="cal-dow">${d}</div>`).join('');
-  for (let i = 0; i < first; i++) html += `<div class="cal-day empty"></div>`;
-  for (let d = 1; d <= days; d++) {
+
+  // Leading empty cells: align startDay to its correct weekday column
+  const startWeekday = new Date(yr, mo, startDay).getDay();
+  for (let i = 0; i < startWeekday; i++) html += `<div class="cal-day empty"></div>`;
+
+  for (let d = startDay; d <= totalDays; d++) {
     const dt = new Date(yr, mo, d); dt.setHours(0,0,0,0);
     const k = `${yr}-${pad(mo+1)}-${pad(d)}`;
-    const fut = dt > today, isTd = dt.getTime() === today.getTime();
+
+    const afterToday = dt > realToday;
+    const isUntracked = afterToday; // before-start only applied to hide days; visible days are all trackable
+
+    const isTd = dt.getTime() === realToday.getTime();
     const log = D.dailyLog[k]; let sc = 'nodata';
-    if (!fut && log) {
+
+    if (!isUntracked && log) {
       const tot = D.habits.length, dn = D.habits.filter(h => log[h.id]).length;
       sc = tot === 0 ? 'nodata' : dn === tot ? 'all-done' : dn > 0 ? 'partial' : 'missed';
     }
-    html += `<div class="cal-day ${fut?'future':''} ${isTd?'today':''} ${sc}"
-      onmouseenter="showTT(event,'${k}',${fut})" onmouseleave="hideTT()">
-      <span class="cal-day-n">${d}</span>${!fut?'<div class="cal-dot"></div>':''}
+
+    html += `<div class="cal-day ${isUntracked ? 'future' : ''} ${isTd ? 'today' : ''} ${sc}"
+      onmouseenter="showTT(event,'${k}',${isUntracked})" onmouseleave="hideTT()">
+      <span class="cal-day-n">${d}</span>${!isUntracked ? '<div class="cal-dot"></div>' : ''}
     </div>`;
   }
   document.getElementById('cal-grid').innerHTML = html;
